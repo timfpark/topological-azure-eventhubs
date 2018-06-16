@@ -1,6 +1,6 @@
 {
   "name": "topological-azure-eventhubs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -9,8 +9,8 @@
   "author": "Tim Park",
   "license": "MIT",
   "dependencies": {
-    "azure-event-hubs": "0.0.8",
-    "topological": "^1.0.21"
+    "azure-event-processor-host": "^0.1.2",
+    "topological": "^1.0.30"
   },
   "devDependencies": {
     "mocha": "^4.0.1"

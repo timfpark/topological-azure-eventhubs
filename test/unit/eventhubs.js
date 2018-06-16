@@ -2,8 +2,8 @@ const assert = require('assert');
 const fixtures = require('../fixtures');
 
 describe('EventHubsConnection', function() {
-    it('can enqueue, pause, resume, and stream messages', done => {
-        let first = true;
+    it('can start, enqueue, and stream messages', done => {
+        let finished = false;
         fixtures.connection.start(err => {
             assert(!err);
 
@@ -11,34 +11,27 @@ describe('EventHubsConnection', function() {
                 assert(!err);
                 assert(message);
 
-                //assert(message.body.number, 1);
-                //assert(resumed);
-                if (first) done();
-                first = false;
+                assert(message.body.number, 1);
+                if (!finished) done();
+
+                finished = true;
             });
-/*
+
             setTimeout(() => {
-                fixtures.connection.pause(err => {
-                    assert(!err);
-                    setTimeout(() => {
-                        fixtures.connection.enqueue([{
+                fixtures.connection.enqueue(
+                    [
+                        {
                             body: {
-                                userId: "user1",
+                                userId: 'user1',
                                 number: 1
                             }
-                        }], err => {
-                            assert(!err);
-                            setTimeout(() => {
-                                fixtures.connection.resume(err => {
-                                    assert(!err);
-                                    resumed = true;
-                                });
-                            }, 1000);
-                        });
-                    }, 1000);
-                });
-            }, 1000);
-*/
+                        }
+                    ],
+                    err => {
+                        assert(!err);
+                    }
+                );
+            }, 10000000);
         });
     });
 });

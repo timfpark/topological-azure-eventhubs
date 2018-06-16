@@ -1,6 +1,6 @@
-const async = require('async'),
-      { Client } = require('azure-event-hubs'),
-      { Connection } = require("topological");
+const { EventProcessorHost } = require('azure-event-processor-host'),
+    { EventHubClient } = require('azure-event-hubs'),
+    { Connection } = require('topological');
 
 class EventHubConnection extends Connection {
     constructor(config) {
@@ -8,72 +8,60 @@ class EventHubConnection extends Connection {
     }
 
     start(callback) {
-        this.client = Client.fromConnectionString(this.config.connectionString, this.config.name);
-        this.client.open().then(() => {
-            return this.client.createSender();
-        }).then(sender => {
-            this.sender = sender;
-            return callback();
-        }).catch(callback);
-    }
-/*
-    resume(callback) {
-        if (!this.receivers) return callback(new Error("Not yet streaming, cannot resume"));
+        this.eventProcessorHost = EventProcessorHost.createFromConnectionString(
+            EventProcessorHost.createHostName(this.config.hostName),
+            this.config.storageConnectionString,
+            this.config.eventHubConnectionString,
+            {
+                eventHubPath: this.config.eventHubName,
+                leasecontainerName: this.config.leaseContainerName
+            }
+        );
 
-        super.resume(err => {
-            if (err) return callback(err);
+        this.eventHubClient = EventHubClient.createFromConnectionString(
+            this.config.eventHubConnectionString,
+            this.config.eventHubName
+        );
 
-            this.consumerGroup.resume();
-            if (callback) return callback();
-        });
+        return callback();
     }
 
-    pause(callback) {
-        if (!this.receivers) return callback(new Error("Not yet streaming, cannot pause"));
-
-        super.pause(err => {
-            if (err) return callback(err);
-
-            this.consumerGroup.pause();
-            if (callback) return callback();
-        });
-
+    stop(callback) {
+        this.eventProcessorHost.stop();
+        return callback();
     }
-*/
+
     enqueue(messages, callback) {
         if (!messages || messages.length === 0) return callback();
 
-        async.each(messages, (message, messageCallback) => {
-            this.sender.on('errorReceived', err => {
-                console.log(err);
-            });
+        let partitionedMessages = messages.map(message => {
+            message.partitionKey = message.body[this.config.keyField];
+            return message;
+        });
 
-            this.sender.send({
-                contents: JSON.stringify(message.body)
-            }, message.body[this.config.keyField]);
-
-            return messageCallback();
-        }, callback);
+        this.eventHubClient
+            .sendBatch(partitionedMessages)
+            .then(deliveries => {
+                return callback();
+            })
+            .catch(callback);
     }
 
     stream(callback) {
-        async.concat(this.client.getPartitionIds(), (partitionId, partitionCallback) => {
-            this.client.createReceiver(this.config.groupId, partitionId, {
-                'startAfterTime' : this.config.startFromOffset || 0
-            }).then(receiver => {
-                receiver.on('errorReceived', callback);
-                receiver.on('message', message => {
-                    return callback(null, message);
-                });
+        this.eventProcessorHost.on(
+            EventProcessorHost.message,
+            (context, message) => {
+                message.context = context;
+                return callback(null, message);
+            }
+        );
 
-                return partitionCallback(null, receiver);
-            }).catch(partitionCallback);
+        this.eventProcessorHost.start();
+    }
 
-        }, (err, receivers) => {
-            if (err) return callback(err);
-
-            this.receivers = receivers;
-        });
+    succeeded(message, callback) {
+        message.context.checkpoint();
+        if (callback) return callback();
     }
 }
 
